@@ -1,5 +1,5 @@
 import argparse
-
+from wyr.backend import InferKitClient
 
 import pkg_resources
 try:
@@ -14,6 +14,12 @@ def build_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
+    parser.add_argument(
+        'token', type=str, help='InferKit API Token filename'
+    )
+    parser.add_argument(
+        '--prompt', '-p', type=str, default='Would you rather', help='Prompt to begin text generation'
+    )
     parser.add_argument(
         '--version', action='store_true',
         help='Print version ({}) and exit'.format(VERSION)
@@ -30,7 +36,7 @@ def main():
         print(VERSION)
         return
 
-    print('Hello, World!')
+    print(InferKitClient(args.token).generate(args.prompt))
 
 
 if __name__ == '__main__':
