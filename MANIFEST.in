@@ -1,0 +1,6 @@
+include README.md
+include LICENSE
+include CHANGELOG
+include *.py
+include *.txt
+
