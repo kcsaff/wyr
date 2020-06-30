@@ -27,6 +27,7 @@ setup(name='wyr',
       packages=find_packages(),
       install_requires=[
           'requests>=2.24.0',
+          'spacy>=2.3.0',
       ],
       entry_points={
           'console_scripts': ['wyr = wyr:main']
