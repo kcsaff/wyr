@@ -1,9 +1,10 @@
 import argparse
 import random
-from wyr.generators.backend import InferKitClient
-from wyr.generators.reader import TrainingDataReader
+from wyr.generators.inferkit import InferKitClient
+from wyr.generators.trainingdata import TrainingData
 from wyr.interpreter import ChoiceInterpreter
-from wyr.constants import QUESTION_SEPARATOR
+from wyr.constants import QUESTION_SEPARATOR, DEFAULT_TRAINING_PATH, DEFAULT_MODEL_PATH
+from wyr.trainer import TrainedModels
 
 import pkg_resources
 try:
@@ -29,9 +30,6 @@ def build_parser():
     fetch_parser.set_defaults(generator=build_fetcher)
 
     read_parser = subparsers.add_parser('read', help='Read a previously fetched question from training data (for testing)')
-    read_parser.add_argument(
-        'filename', type=str, help='Training data filename'
-    )
     read_parser.set_defaults(generator=build_reader)
 
     parser.add_argument(
@@ -41,6 +39,16 @@ def build_parser():
     parser.add_argument(
         '--massage', '-M', action='store_true',
         help='Massage the question for human readability'
+    )
+    parser.add_argument(
+        '--model-dir', '-m', type=str,
+        default=DEFAULT_MODEL_PATH,
+        help='Trained model directory'
+    )
+    parser.add_argument(
+        '--training-data', '-T', type=str,
+        default=DEFAULT_TRAINING_PATH,
+        help='Training data filename'
     )
     parser.add_argument(
         '--version', action='store_true',
@@ -58,7 +66,7 @@ def build_fetcher(args):
 
 
 def build_reader(args):
-    client = TrainingDataReader(args.filename)
+    client = TrainingData(args.training_data)
 
     def generate():
         return random.choice(client.questions)
@@ -77,12 +85,15 @@ def main():
         return
 
     generate = args.generator(args)
-    interpreter = ChoiceInterpreter()
+    if args.massage:
+        masseuse = ChoiceInterpreter(TrainedModels(args.training_data, args.model_dir))
+    else:
+        masseuse = None
 
     for i in range(args.count):
         question = generate()
-        if args.massage:
-            question = interpreter.massage_question(question)
+        if masseuse:
+            question = masseuse.massage_question(question)
 
         print(question)
         if args.count > 1:

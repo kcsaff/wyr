@@ -1,7 +1,9 @@
-from wyr.constants import QUESTION_SEPARATOR
+from wyr.constants import DEFAULT_TRAINING_PATH, QUESTION_SEPARATOR
+from typing import Dict, Generator, List, Tuple
+from functools import cached_property, lru_cache
 
 
-class TrainingDataReader(object):
+class TrainingData(object):
     """
     Reads training data that can be read by spacy from the given filename.  The data format should be:
 
@@ -11,37 +13,38 @@ class TrainingDataReader(object):
        such as a human might answer.
 
     :param filename: Filename to read
-    :param level: level of bracketing to record
-    :param label: label to apply to selection
     :return: The structured training data readable by spacy NEP models
     """
-    def __init__(self, filename: str):
+    def __init__(self, filename: str = DEFAULT_TRAINING_PATH):
         self.__filename = filename
-        self.__raw_data = None
-        self.__questions = None
 
-    @property
-    def raw_data(self):
-        if self.__raw_data is None:
-            with open(self.__filename, 'r') as f:
-                self.__raw_data = list(self.__split_questions(f))
-        return self.__raw_data
+    @lru_cache
+    def __new__(cls, filename: str = DEFAULT_TRAINING_PATH):
+        result = object.__new__(cls)
+        cls.__init__(result, filename)
+        return result
 
-    def prepare_data(self, level, label):
+    @cached_property
+    def raw_data(self) -> List[str]:
+        with open(self.__filename, 'r') as f:
+            return list(self.__split_questions(f))
+
+    @lru_cache
+    def prepare_data(self, level: int, label: str) -> List[Tuple[str, Dict[str, List[Tuple[int, int, str]]]]]:
         return [choices
                 for choices in [self.__prepare_markup(question, level, label) for question in self.raw_data]
                 if choices]
 
-    @property
-    def questions(self):
-        if self.__questions is None:
-            self.__questions = [question.replace('[', '').replace(']', '').strip()
-                                for question in self.raw_data]
-        return self.__questions
+    @cached_property
+    def questions(self) -> List[str]:
+        return [question.replace('[', '').replace(']', '').strip() for question in self.raw_data]
 
     @staticmethod
-    def __prepare_markup(question, level, label):
-        """Find choices in each question"""
+    def __prepare_markup(question: str, level: int, label: str):
+        """
+        Find choices in each question, emitting in a format suitable for spacy.
+        """
+
         chars = []
         entities = []
         beginnings = []
@@ -62,7 +65,7 @@ class TrainingDataReader(object):
             return None
 
     @staticmethod
-    def __split_questions(lines):
+    def __split_questions(lines) -> Generator[str, None, None]:
         """Split questions"""
         accumulated_lines = []
         for line in lines:
