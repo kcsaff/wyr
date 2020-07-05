@@ -25,12 +25,17 @@ setup(name='wyr',
       url='https://github.com/kcsaff/wyr',
       license='MIT',
       packages=find_packages(),
+      package_data={
+          'wyr': ['data/*']
+      },
       install_requires=[
+          'aitextgen>=0.2.2',
+          'colorama>=0.4.3',
           'requests>=2.24.0',
           'spacy>=2.3.0',
+          'spacy-lookups-data>=0.3.2',
       ],
       entry_points={
           'console_scripts': ['wyr = wyr:main']
       },
-      include_package_data=False,
 )

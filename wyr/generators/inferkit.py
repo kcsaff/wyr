@@ -1,4 +1,6 @@
 import requests
+import time
+from wyr.console import Console
 
 
 class BearerAuth(requests.auth.AuthBase):
@@ -27,18 +29,31 @@ class BearerAuth(requests.auth.AuthBase):
 class InferKitClient(object):
     URL = 'https://api.inferkit.com/v1/models/standard/generate'
 
-    def __init__(self, token_filename):
+    def __init__(self, token_filename, console=None):
         self.auth = BearerAuth.load(token_filename)
+        if console is None:
+            console = Console()
+        self.__console = console
 
-    def generate(self, prompt, length=280, beginning=True):
-        response = requests.post(
-            self.URL,
-            auth=self.auth,
-            json={'prompt': {'text': prompt}, 'length': length, 'startFromBeginning': beginning})
+    def generate(self, prompt, length=280, beginning=True, max_retries=3):
+        for _ in range(max_retries):
+            response = requests.post(
+                self.URL,
+                auth=self.auth,
+                json={'prompt': {'text': prompt}, 'length': length, 'startFromBeginning': beginning})
+
+            if response.ok:
+                break
+            elif response.status_code == 502:
+                time.sleep(30)
+                continue
+            else:
+                break
+
         try:
             prompt_continuation = response.json()['data']['text']
         except:
-            print(response)
-            print(response.text)
+            self.__console.warn(response)
+            self.__console.warn(response.text)
         else:
             return prompt + prompt_continuation

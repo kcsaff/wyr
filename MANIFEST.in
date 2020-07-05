@@ -3,4 +3,4 @@ include LICENSE
 include CHANGELOG
 include *.py
 include *.txt
-
+include training/data

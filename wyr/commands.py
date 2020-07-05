@@ -3,8 +3,10 @@ import random
 from wyr.generators.inferkit import InferKitClient
 from wyr.generators.trainingdata import TrainingData
 from wyr.interpreter import ChoiceInterpreter
-from wyr.constants import QUESTION_SEPARATOR, DEFAULT_TRAINING_PATH, DEFAULT_MODEL_PATH
+from wyr.constants import QUESTION_SEPARATOR, DEFAULT_MODEL_PATH, DEFAULT_GPT2_MODEL, GPT2_MODELS
 from wyr.trainer import TrainedModels
+from wyr.generators.twitter import TweetGrabber
+from wyr.generators.localgpt2 import LocalGpt2
 
 import pkg_resources
 try:
@@ -20,17 +22,42 @@ def build_parser():
     )
     subparsers = parser.add_subparsers()
 
-    fetch_parser = subparsers.add_parser('fetch', help='Fetch a question from InferKit')
-    fetch_parser.add_argument(
+    inferkit_parser = subparsers.add_parser('inferkit', help='Fetch a question from InferKit')
+    inferkit_parser.add_argument(
         'token', type=str, help='InferKit API Token filename'
     )
-    fetch_parser.add_argument(
+    inferkit_parser.add_argument(
         '--prompt', '-p', type=str, default='Would you rather', help='Prompt to begin text generation'
     )
-    fetch_parser.set_defaults(generator=build_fetcher)
+    inferkit_parser.set_defaults(generator=build_inferkit)
 
     read_parser = subparsers.add_parser('read', help='Read a previously fetched question from training data (for testing)')
     read_parser.set_defaults(generator=build_reader)
+
+    search_parser = subparsers.add_parser('tweets', help='Search twitter for results')
+    search_parser.add_argument(
+        'keys', type=str, help='Auth keys filename'
+    )
+    search_parser.add_argument(
+        '--prompt', '-p', type=str, default='"Would you rather"',
+        help='Query to search for'
+    )
+    search_parser.set_defaults(generator=build_searcher)
+
+    gpt2_parser = subparsers.add_parser('gpt2', help='Generate using local GPT2')
+    gpt2_parser.add_argument(
+        '--gpt2-model', '-g', choices=GPT2_MODELS, default=DEFAULT_GPT2_MODEL,
+        help='GPT2 model to use for text generation'
+    )
+    gpt2_parser.add_argument(
+        '--prompt', '-p', type=str, default='Would you rather',
+        help='Prompt to begin text generation'
+    )
+    gpt2_parser.add_argument(
+        '--temperature', '-T', type=float, default=1.0,
+        help='Generation temperature (1.0 = average, higher is more "creative")'
+    )
+    gpt2_parser.set_defaults(generator=build_gpt2)
 
     parser.add_argument(
         '--count', '-c', type=int, default=1,
@@ -38,7 +65,11 @@ def build_parser():
     )
     parser.add_argument(
         '--massage', '-M', action='store_true',
-        help='Massage the question for human readability'
+        help='Massage the question for human readability & guess choices'
+    )
+    parser.add_argument(
+        '--retrain', '-R', action='store_true',
+        help='Retrain the choice interpreter'
     )
     parser.add_argument(
         '--model-dir', '-m', type=str,
@@ -47,8 +78,8 @@ def build_parser():
     )
     parser.add_argument(
         '--training-data', '-T', type=str,
-        default=DEFAULT_TRAINING_PATH,
-        help='Training data filename'
+        default=None,
+        help='Training data filename -- by default loads package data'
     )
     parser.add_argument(
         '--version', action='store_true',
@@ -57,19 +88,37 @@ def build_parser():
     return parser
 
 
-def build_fetcher(args):
+def build_inferkit(args):
     client = InferKitClient(args.token)
 
-    def generate():
-        return client.generate(args.prompt)
+    def generate(count):
+        return [client.generate(args.prompt) for _ in range(count)]
     return generate
 
 
 def build_reader(args):
     client = TrainingData(args.training_data)
 
-    def generate():
-        return random.choice(client.questions)
+    def generate(count):
+        return random.sample(client.questions, count)
+
+    return generate
+
+
+def build_searcher(args):
+    grabber = TweetGrabber(args.keys)
+
+    def generate(count):
+        return [grabber.random_tweet(args.prompt) for _ in range(count)]
+
+    return generate
+
+
+def build_gpt2(args):
+    client = LocalGpt2(args.model_dir, args.gpt2_model)
+
+    def generate(count):
+        return client.generate(prompt=args.prompt, temperature=args.temperature, count=count)
 
     return generate
 
@@ -85,13 +134,12 @@ def main():
         return
 
     generate = args.generator(args)
-    if args.massage:
-        masseuse = ChoiceInterpreter(TrainedModels(args.training_data, args.model_dir))
-    else:
-        masseuse = None
+    models = TrainedModels(args.model_dir, args.training_data) if args.massage or args.retrain else None
+    masseuse = ChoiceInterpreter(models) if args.massage else None
+    if args.retrain:
+        models.retrain()
 
-    for i in range(args.count):
-        question = generate()
+    for question in generate(args.count):
         if masseuse:
             question = masseuse.massage_question(question)
 
