@@ -1,9 +1,11 @@
 import argparse
 import random
+import sys
 from wyr.generators.inferkit import InferKitClient
 from wyr.generators.trainingdata import TrainingData
 from wyr.interpreter import ChoiceInterpreter
 from wyr.constants import QUESTION_SEPARATOR, DEFAULT_MODEL_PATH, DEFAULT_GPT2_MODEL, GPT2_MODELS
+from wyr.senders.mastodon import MastodonPoster
 from wyr.trainer import TrainedModels
 from wyr.generators.twitter import TweetGrabber
 from wyr.generators.localgpt2 import LocalGpt2
@@ -72,6 +74,11 @@ def build_parser():
         help='Retrain the choice interpreter'
     )
     parser.add_argument(
+        '--mastodon-token', type=str,
+        default='',
+        help='Filename of mastodon token'
+    )
+    parser.add_argument(
         '--model-dir', '-m', type=str,
         default=DEFAULT_MODEL_PATH,
         help='Trained model directory'
@@ -132,6 +139,9 @@ def main():
     if args.version:
         print(VERSION)
         return
+    elif not hasattr(args, 'generator'):
+        parser.print_help(sys.stderr)
+        exit(1)
 
     generate = args.generator(args)
     models = TrainedModels(args.model_dir, args.training_data) if args.massage or args.retrain else None
@@ -144,6 +154,8 @@ def main():
             question = masseuse.massage_question(question)
 
         print(question)
+        if args.mastodon_token:
+            MastodonPoster(args.mastodon_token).post(question)
         if args.count > 1:
             print(QUESTION_SEPARATOR, flush=True)
 

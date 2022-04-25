@@ -3,6 +3,8 @@ from typing import List
 from wyr.trainer import TrainedModels
 import spacy
 
+sentence_enders = '.!?"\')]}-'
+
 
 class ChoiceInterpreter(object):
     BASE_MODEL = 'en_core_web_sm'
@@ -26,10 +28,10 @@ class ChoiceInterpreter(object):
             # TODO: auto-load on failure with `python -m spacy download en_core_web_sm` ?
 
     def massage_question(self, question: str) -> str:
+        question = self.__remove_trailing_broken_sentence(question[:self.__cut_length])
         choices = self.__find_best_choices(question)
         if len(choices) > self.__max_choice_count:
             choices = choices[:self.__max_choice_count]
-        question = self.__remove_trailing_broken_sentence(question[:self.__cut_length], choices)
         if len(choices) == 0:
             choices = ['yes', 'no']
         elif len(choices) == 1:
@@ -50,13 +52,13 @@ class ChoiceInterpreter(object):
         doc = self.__models.get_or_train(level)(question)
         return [ent.text for ent in doc.ents]
 
-    def __remove_trailing_broken_sentence(self, question: str, choices: List[str]) -> str:
+    def __remove_trailing_broken_sentence(self, question: str, choices: List[str] = ()) -> str:
         doc = self.__nlp(question)
         sentences = list(doc.sents)
         if len(sentences) > 1:
             last_sentence = sentences[-1].text
             possible_question = question[:-len(last_sentence)]
-            if choices[-1] in possible_question:
+            if (not choices) or choices[-1] in possible_question:
                 question = possible_question
         return question.strip()
 
