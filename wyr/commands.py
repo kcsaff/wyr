@@ -143,19 +143,21 @@ def main():
         parser.print_help(sys.stderr)
         exit(1)
 
+    should_massage = bool(args.massage or args.mastodon_token)
+    should_load_models = bool(should_massage or args.retrain)
+
     generate = args.generator(args)
-    models = TrainedModels(args.model_dir, args.training_data) if args.massage or args.retrain else None
-    masseuse = ChoiceInterpreter(models) if args.massage else None
+    models = TrainedModels(args.model_dir, args.training_data) if should_load_models else None
+    masseuse = ChoiceInterpreter(models) if should_massage else None
     if args.retrain:
         models.retrain()
 
     for question in generate(args.count):
-        if masseuse:
-            question = masseuse.massage_question(question)
-
-        print(question)
         if args.mastodon_token:
-            MastodonPoster(args.mastodon_token).post(question)
+            question = MastodonPoster(args.mastodon_token, masseuse).post(question)
+        elif masseuse:
+            question = masseuse.massage_question(question)
+        print(question)
         if args.count > 1:
             print(QUESTION_SEPARATOR, flush=True)
 
