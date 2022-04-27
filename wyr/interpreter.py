@@ -48,11 +48,14 @@ class ChoiceInterpreter(object):
         outer_choices = self.__find_model_choices(question, 1, filtered=True)
         inner_choices = self.__find_model_choices(question, 2, filtered=True)
 
+        if len(outer_choices) < 2:
+            simple_choices = self.__find_simple_choices(question)
+            if len(simple_choices) >= 2:
+                outer_choices = simple_choices
+
         # This is just a weird heuristic
         if 2 <= len(outer_choices) != len(inner_choices):
             return outer_choices
-        elif len(outer_choices) < 2 <= len(inner_choices):
-            return inner_choices
 
         choices = []
         for inner, outer in zip(inner_choices, outer_choices):
@@ -60,6 +63,7 @@ class ChoiceInterpreter(object):
                 choices.append(inner)
             else:
                 choices.append(outer)
+        choices.extend(outer_choices[len(choices):])
         return choices
 
     def __find_model_choices(self, question: str, level: int, *, filtered: bool = False) -> List[str]:
@@ -68,6 +72,23 @@ class ChoiceInterpreter(object):
         if filtered:
             choices = list(self.__filter_choices(question, choices))
         return choices
+
+    def __find_simple_choices(self, question):
+        first_sentence = self.split_sentences(question)[0]
+        if not first_sentence.startswith('Would you rather'):
+            return []
+        if ' or ' in first_sentence:
+            choices = list()
+            start = len('Would you rather ')
+            while True:
+                i = first_sentence.find(' or ', start)
+                if i < 0:
+                    choices.append(first_sentence[start:].strip().strip('.,?"\':!()[]{};').strip())
+                    break
+                choices.append(first_sentence[start:i].strip().strip(',:"\''))
+                start = i + 4
+            return choices
+        return []
 
     def __remove_trailing_broken_sentence(self, question: str, choices: List[str] = ()) -> str:
         question = question.strip()
@@ -87,7 +108,21 @@ class ChoiceInterpreter(object):
     def __filter_choices(self, question, choices):
         skipped_sentences = defaultdict(list)
         sentences = self.split_sentences(question)
+        choices = list(choices)
+        # Combine choices if adjacent ones are in question
+        last_choice = ''
+        combined_choices = list()
         for i, choice in enumerate(choices):
+            if last_choice:
+                if last_choice + choice in question:
+                    last_choice = last_choice + choice
+                else:
+                    combined_choices.append(last_choice)
+                    last_choice = choice
+        if last_choice:
+            combined_choices.append(last_choice)
+
+        for i, choice in enumerate(combined_choices):
             for j, sentence in enumerate(sentences):
                 if choice in sentence:
                     if i < 2 or j < 2 or '?' in sentence:
@@ -95,9 +130,9 @@ class ChoiceInterpreter(object):
                     else:
                         skipped_sentences[j].append(choice)
                     break
-        for j, choices in skipped_sentences.items():
-            if len(choices) >= 2:
-                yield from choices
+        for j, skipped_choices in skipped_sentences.items():
+            if len(skipped_choices) >= 2:
+                yield from skipped_choices
 
     def __may_be_sentence_end(self, text, pos=None):
         if pos is None:
