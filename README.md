@@ -1,5 +1,7 @@
 # wyr
  Script to generate Would You Rather questions from Interkit
+ 
+ Example running at <a rel="me" href="https://botsin.space/wouldyourather">Bots In Space</a>.
 
 ## Windows
 You might need this to install requirements:
